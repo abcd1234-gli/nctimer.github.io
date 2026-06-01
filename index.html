@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>Narcoleptic Timer</title>
+  <script src="https://cdn.cubing.net/v0/js/cubing.bundle.js" defer></script>
+  <style>
+    :root {
+      --bg: #0a0f1e;
+      --surface: rgba(8, 18, 36, 0.95);
+      --glow: #00b7ff;
+      --accent: #0077ff;
+      --text: #c8e6ff;
+      --ready: #00ff88;
+      --hold: #ffaa00;
+      --running: #40ff90;
+      --inspection: #ff8800;
+    }
+    * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; user-select:none; }
+    html, body { width:100%; height:100%; overflow:hidden; font-family:'Inter',system-ui,sans-serif; touch-action:manipulation; background:var(--bg); }
+    body { display:flex; justify-content:center; align-items:center; position:fixed; inset:0; transition:background 0.6s; }
+    .bg-glow { position:fixed; inset:0; pointer-events:none; z-index:0; background:radial-gradient(ellipse at 50% 40%, var(--glow)08, transparent 70%); opacity:0.15; transition:all 0.6s; }
+    .container { position:relative; z-index:1; width:100%; height:100%; display:flex; flex-direction:column; align-items:center; padding:1rem; gap:0.5rem; overflow-y:auto; }
+    .header { display:flex; justify-content:space-between; align-items:center; width:100%; max-width:700px; }
+    .logo h1 { font-size:1.6rem; font-weight:800; letter-spacing:2px; background:linear-gradient(135deg,#e0f0ff,#60b0ff); -webkit-background-clip:text; -webkit-text-fill-color:transparent; filter:drop-shadow(0 0 6px var(--glow)); }
+    .logo span { font-size:1.2rem; color:#80c0ff; }
+    .icon-btn { width:44px; height:44px; border-radius:50%; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); color:#90b8e0; font-size:1.3rem; display:flex; align-items:center; justify-content:center; cursor:pointer; }
+    .controls-bar { display:flex; gap:0.5rem; flex-wrap:wrap; justify-content:center; align-items:center; }
+    .event-pill select { background:rgba(4,12,28,0.9); border:1px solid rgba(0,120,255,0.4); color:#e0f0ff; padding:0.4rem 1rem; border-radius:2rem; font-weight:600; font-size:0.85rem; cursor:pointer; outline:none; }
+    .timer-card { flex:1; width:100%; max-width:700px; background:var(--surface); border-radius:2.5rem; border:1px solid rgba(255,255,255,0.06); display:flex; flex-direction:column; align-items:center; justify-content:center; padding:1.5rem; transition:all 0.4s; box-shadow:0 20px 60px rgba(0,0,0,0.5); cursor:pointer; position:relative; }
+    .timer-card.holding { border-color:var(--hold); box-shadow:0 0 60px rgba(255,170,0,0.2),0 20px 60px rgba(0,0,0,0.5); }
+    .timer-card.ready { border-color:var(--ready); box-shadow:0 0 70px rgba(0,255,136,0.25),0 20px 60px rgba(0,0,0,0.5); }
+    .timer-card.running { border-color:var(--running); box-shadow:0 0 50px rgba(0,255,136,0.15),0 20px 60px rgba(0,0,0,0.5); }
+    .timer-card.inspecting { border-color:var(--inspection); }
+    .time { font-size:clamp(3.5rem,14vw,7rem); font-weight:800; font-variant-numeric:tabular-nums; letter-spacing:2px; background:linear-gradient(180deg,#f0f8ff,#70c0ff); -webkit-background-clip:text; -webkit-text-fill-color:transparent; filter:drop-shadow(0 0 20px rgba(0,180,255,0.4)); }
+    .inspection-time { font-size:clamp(2rem,8vw,4rem); font-weight:800; color:var(--inspection); }
+    .inspection-time.warning-8 { color:#ffaa00; } .inspection-time.warning-12 { color:#ff4444; animation:pulse 0.5s infinite; }
+    @keyframes pulse { 0%,100%{ opacity:1; } 50%{ opacity:0.5; } }
+    .status { font-size:1rem; font-weight:600; letter-spacing:2px; color:var(--hold); margin-top:0.5rem; }
+    .scramble-box { width:100%; max-width:600px; background:rgba(0,0,0,0.3); border-radius:1.5rem; padding:0.8rem 1.2rem; border:1px solid rgba(255,255,255,0.05); margin-top:0.8rem; }
+    .scramble { font-family:'Fira Code',monospace; font-size:0.95rem; color:#90c0e0; text-align:center; word-break:break-word; }
+    .btn-row { display:flex; gap:0.8rem; margin-top:0.5rem; }
+    .btn { padding:0.7rem 1.8rem; border-radius:3rem; font-weight:600; font-size:0.9rem; letter-spacing:1px; cursor:pointer; border:1px solid rgba(255,255,255,0.1); background:rgba(255,255,255,0.04); color:#a0c8e8; transition:all 0.3s; }
+    .btn:active { transform:scale(0.95); background:rgba(255,255,255,0.1); }
+    .stats-row, .ao-row { display:flex; gap:1rem; flex-wrap:wrap; justify-content:center; font-size:0.8rem; color:#80a8d0; background:rgba(0,0,0,0.2); padding:0.5rem 1.2rem; border-radius:3rem; margin-top:0.3rem; }
+    .stat-val { font-weight:700; background:rgba(0,0,0,0.3); padding:0.2rem 0.6rem; border-radius:2rem; color:#c0d8f0; }
+    .time-list { width:100%; max-width:700px; max-height:200px; overflow-y:auto; background:rgba(0,0,0,0.3); border-radius:1.5rem; padding:0.8rem; margin-top:0.5rem; }
+    .time-item { display:flex; justify-content:space-between; align-items:center; padding:0.3rem 0.5rem; border-bottom:1px solid rgba(255,255,255,0.05); font-size:0.85rem; color:#80a8d0; }
+    .time-item .idx { width:30px; } .time-item .time-val { flex:1; text-align:center; } .time-item .penalty { margin-left:0.5rem; cursor:pointer; }
+    .session-row { display:flex; gap:0.5rem; align-items:center; }
+    .session-btn { padding:0.4rem 1rem; border-radius:2rem; font-size:0.75rem; font-weight:600; cursor:pointer; background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); color:#80a8d0; }
+    .settings-panel { background:rgba(2,18,34,0.9); border:1px solid #00a6ff; border-radius:1.5rem; padding:0.6rem 1rem; margin-top:0.4rem; display:flex; flex-wrap:wrap; gap:0.8rem; justify-content:center; }
+    .color-row { display:flex; align-items:center; gap:0.3rem; } .color-label { color:#b3e5ff; font-size:0.8rem; }
+    input[type="color"] { width:30px; height:30px; border:2px solid #00b7ff; border-radius:50%; background:#001122; cursor:pointer; padding:0; }
+    .hold-bar { position:fixed; bottom:2rem; left:50%; transform:translateX(-50%); background:rgba(0,0,0,0.6); backdrop-filter:blur(20px); border:1px solid rgba(255,255,255,0.1); border-radius:3rem; padding:0.7rem 2rem; color:#fff; font-weight:600; font-size:0.9rem; letter-spacing:2px; display:none; z-index:100; }
+    .footer { font-size:0.7rem; color:rgba(150,190,220,0.4); letter-spacing:1px; margin-top:0.3rem; }
+    .hidden { display:none !important; }
+  </style>
+</head>
+<body id="mainBody">
+<div class="bg-glow" id="bgGlow"></div>
+<div class="container">
+  <div class="header">
+    <div class="logo"><h1>NARCOLEPTIC</h1><span>TIMER</span></div>
+    <div class="icon-btn" id="settingsToggleBtn">⚙️</div>
+  </div>
+
+  <div class="controls-bar">
+    <div class="event-pill"><select id="eventSelect"></select></div>
+    <button class="btn" id="metronomeBtn" style="padding:0.4rem 1rem;">⏱️ Metronome</button>
+  </div>
+
+  <div class="timer-card" id="timerFace">
+    <div class="time" id="timerDisplay">0.00</div>
+    <div class="inspection-time hidden" id="inspectionDisplay">15</div>
+    <div class="status" id="statusDisplay"></div>
+    <div class="scramble-box"><div class="scramble" id="scrambleDisplay">R U R' U'</div></div>
+  </div>
+
+  <div class="btn-row">
+    <button class="btn" id="resetBtn">Reset</button>
+    <button class="btn" id="deleteLastBtn">Delete Last</button>
+    <button class="btn" id="toggleTimeListBtn">📋 Times</button>
+  </div>
+
+  <div class="stats-row">
+    <div>⏱️ <span class="stat-val" id="lastTimeDisplay">—</span></div>
+    <div>📊 <span class="stat-val" id="solveCountDisplay">0</span></div>
+    <div>AO5 <span class="stat-val" id="ao5Display">—</span></div>
+    <div>AO12 <span class="stat-val" id="ao12Display">—</span></div>
+    <div>Mean <span class="stat-val" id="meanDisplay">—</span></div>
+    <div>Best <span class="stat-val" id="bestDisplay">—</span></div>
+    <div>σ <span class="stat-val" id="stdDisplay">—</span></div>
+    <div>📁 <span class="stat-val" id="sessionDisplay">main</span></div>
+  </div>
+
+  <div class="time-list hidden" id="timeListContainer">
+    <div id="timeListInner"></div>
+  </div>
+
+  <div class="session-row">
+    <button class="session-btn" id="newSessionBtn">+ New</button>
+    <button class="session-btn" id="resetSessionBtn">↺ Reset</button>
+    <select id="sessionSelect" style="background:rgba(4,12,28,0.9); border:1px solid rgba(0,120,255,0.4); color:white; padding:0.4rem 1rem; border-radius:2rem; font-size:0.8rem;"></select>
+  </div>
+
+  <div class="settings-panel hidden" id="settingsPanel">
+    <div class="color-row"><span class="color-label">🌌 Glow</span><input type="color" id="glowColor" value="#00b7ff"></div>
+    <div class="color-row"><span class="color-label">🔵 Accent</span><input type="color" id="accentColor" value="#0077ff"></div>
+    <div class="color-row"><span class="color-label">📋 BG</span><input type="color" id="bgColor" value="#0a0f1e"></div>
+    <button class="btn" id="applyThemeBtn">Apply</button>
+  </div>
+
+  <div class="footer">Author: Muzakkir Mahmud</div>
+</div>
+<div class="hold-bar" id="holdIndicator">HOLD TO START</div>
+
+<script>
+// ========================
+// NARCOLEPTIC TIMER v3.4 – stackmat removed
+// ========================
+
+// ---------- SUBSET ALGORITHMS ----------
+const OLL_ALGS = [
+  "R U R' U R U2 R'", "R U2 R' U' R U' R'", "R U2 R2 U' R2 U' R2 U2 R",
+  "R U R' U R U' R' U R U2 R'", "R U2 R2 U' R U' R' U2 F R F'",
+  "F R U R' U' F'", "F R U R' U' F' U F R U R' U' F'",
+  "F R U R' U' F' f R U R' U' f'", "R U R' U' R' F R F'",
+  "R U R' U R U' R' U' R' F R F'", "R U2 R' U2 R' F R F'",
+  "R U R' U R U2 R' F R U R' U' F'", "R U2 R' U' R U' R2 U2 R U R' U R",
+  "R U R' U R U2 R' U' R U2 R' U' R U' R'", "R U2 R2 U' R2 U' R2 U2 R U2 R' U' R U' R'",
+  "r U R' U R U2 r'", "r U2 R' U' R U' r'", "r' U2 R U R' U r",
+  "r U R' U R U2 r' U' r U R' U R U2 r'", "R U R' U' R' F R2 U R' U' F'",
+  "R U R' U' B' R' F R S", "R U2 R' U' R U R' U' R U' R'",
+  "R U2 R' U' R U R' U' R U R' U' R U' R'", "R U R' U' R U' R' F' U' F R U R'",
+  "F R U R' U' F' f R U R' U' f' U' F R U R' U' F'", "R U R' U R U2 R' U2 R U R' U R U2 R'",
+  "R U R' U' R U2 R' U' R U R' U' R U' R'", "r U R' U' r' F R F'",
+  "R U R' U' M' U R U' r'", "R U2 R2 F R F' U2 R' F R F'",
+  "R U R' U' R' F R F' U2 R' F R F'", "R U R' U R U2 R2 U' R U' R' U2 R",
+  "R U R' U' R U' R' U2 F R U R' U' F'", "R U2 R' U' R U R' U' R U R' U' R U' R'",
+  "R U2 R2 U' R U' R' U2 F R F'", "R U R' U' R U2 R' F R U R' U' F'",
+  "R U2 R' U' R U' R2 U2 R U R' U R", "R U R' U' R U R' U' R U R' U' R U R'",
+  "R U2 R2 U' R2 U' R2 U2 R", "R U R' U R U2 R' U R U' R' U R U' R'",
+  "R U2 R' U' R U R' U' R U' R' U R U2 R'", "R U R' U R U2 R' U' R U R' U' R U' R'",
+  "F R U R' U' F' U F R U R' U' F'", "R U R' U' R' F R F' U2 R' F R F'",
+  "R U2 R' U' R U' R' U2 F R U R' U' F'", "R U2 R' U' R U R' U2 R' F R F'",
+  "R U R' U' R U' R' U' R U R' U R U2 R'", "R U R' U' R U R' U' R U R' U R U2 R'",
+  "R U2 R' U' R U R' U' R U R' U R U2 R'", "R U R' U R U2 R' U R U' R' U R U2 R'",
+  "r U R' U' r' F R F'", "R U R' U' r R' U R U' r'", "R' F R U R' F' R F U' F'",
+  "F R U R' U' F' U2 F R U R' U' F'", "R U R' U R U2 R2 U' R U' R' U2 R U R' U R",
+  "R U2 R' U' R U' R2 U2 R U R' U R U2 R'", "R U R' U R U2 R' U2 R U R' U' R U R'"
+];
+const PLL_ALGS = [
+  "R U R' U' R' F R2 U' R' U' R U R' F'", "R' U R' U' R' U' R' U R U R2",
+  "R U R' F' R U R' U' R' F R2 U' R' U'", "R' U2 R U2 R' F R U R' U' R' F' R2 U'",
+  "R U R' U R U R' F' R U R' U' R' F R2 U' R' U2 R U' R'",
+  "R U' R' U' R U R D R' U' R D' R' U2 R' U'", "R U R' U' R' F R2 U' R' U' R U R' F' U'",
+  "R U R' F' R U R' U' R' F R2 U' R' U' R U' R'", "R U R' U R U2 R' U' R U2 R' U' R U' R' U R U2 R'",
+  "R U R' U' R' F R2 U' R' U' R U R' F' U R U' R'", "R U R' U' R' F R2 U' R' U' R U R' F' U2",
+  "R U R' U' R' F R2 U' R' U' R U R' F' U' R U R'", "R U R' U' R' F R2 U' R' U' R U R' F' U' R U2 R'",
+  "R U R' U' R' F R2 U' R' U' R U R' F' U R U R' U'",
+  "R U R' U' R' F R2 U' R' U' R U R' F' U R U' R' U'",
+  "R U R' U' R' F R2 U' R' U' R U R' F' U' R U R' U",
+  "R U R' U' R' F R2 U' R' U' R U R' F' U R U' R' U2",
+  "R U R' U' R' F R2 U' R' U' R U R' F' U' R U2 R' U'",
+  "R U R' U' R' F R2 U' R' U' R U R' F' U R U R' U2",
+  "R U R' U' R' F R2 U' R' U' R U R' F' U' R U R' U2"
+];
+const subsetAlgs = { 'oll': OLL_ALGS, 'pll': PLL_ALGS };
+
+// ---------- SCRAMBLE CATEGORIES ----------
+const scrambleCategories = [
+  ["WCA", [
+    ["3x3x3 ★","333"],["2x2x2 ★","222"],["4x4x4 ★","444wca"],["5x5x5 ★","555wca"],["6x6x6 ★","666wca"],["7x7x7 ★","777wca"],
+    ["3x3 BLD","333ni"],["3x3 OH","333oh"],["Clock","clkwca"],["Megaminx","mgmp"],["Pyraminx","pyrso"],["Skewb","skbso"],["Square-1","sqrs"]
+  ]],
+  ["3x3x3 Subsets", [
+    ["PLL","pll"],["OLL","oll"],["Last Slot+LL","lsll2"],["Last Layer","ll"],["ZBLL","zbll"],["COLL","coll"],["CLL","cll"],["ELL","ell"],
+    ["2GLL","2gll"],["ZZLL","zzll"],["ZBLS","zbls"],["EOLS","eols"],["WVLS","wvls"],["VLS","vls"],["Cross Solved","f2l"],
+    ["EOLine","eoline"],["EO Cross","eocross"],["Easy Cross","easyc"]
+  ]],
+  ["2x2x2 Subsets", [
+    ["Optimal","222o"],["3-gen","2223"],["EG","222eg"],["CLL","222eg0"],["EG1","222eg1"],["EG2","222eg2"],["TCLL","222tc"],["LS","222lsall"]
+  ]],
+  ["4x4x4", [["WCA","444wca"],["SiGN","444"],["YJ","444yj"],["Edges","4edge"],["R,r,U,u","RrUu"]]],
+  ["5x5x5", [["WCA","555wca"],["SiGN","555"]]],
+  ["6x6x6", [["WCA","666wca"],["SiGN","666si"]]],
+  ["7x7x7", [["WCA","777wca"],["SiGN","777si"]]],
+  ["Other Puzzles", [
+    ["15 puzzle","15p"],["8 puzzle","8p"],["Kilominx","klmp"],["Gigaminx","giga"],["Redi Cube","redim"],
+    ["Dino Cube","dinoso"],["Ivy Cube","ivyso"],["FTO","ftoso"]
+  ]]
+];
+
+// ---------- DOM ----------
+const $ = id => document.getElementById(id);
+const body = $('mainBody'), bgGlow = $('bgGlow'), timerFace = $('timerFace'), timerDisplay = $('timerDisplay'),
+  inspectionDisplay = $('inspectionDisplay'), statusDisplay = $('statusDisplay'), scrambleDisplay = $('scrambleDisplay'),
+  resetBtn = $('resetBtn'), deleteLastBtn = $('deleteLastBtn'), toggleTimeListBtn = $('toggleTimeListBtn'),
+  lastTimeDisplay = $('lastTimeDisplay'), solveCountDisplay = $('solveCountDisplay'),
+  ao5Display = $('ao5Display'), ao12Display = $('ao12Display'), meanDisplay = $('meanDisplay'),
+  bestDisplay = $('bestDisplay'), stdDisplay = $('stdDisplay'), sessionDisplay = $('sessionDisplay'),
+  eventSelect = $('eventSelect'), settingsToggleBtn = $('settingsToggleBtn'), settingsPanel = $('settingsPanel'),
+  glowColorInput = $('glowColor'), accentColorInput = $('accentColor'), bgColorInput = $('bgColor'),
+  applyThemeBtn = $('applyThemeBtn'), newSessionBtn = $('newSessionBtn'), resetSessionBtn = $('resetSessionBtn'),
+  sessionSelect = $('sessionSelect'), holdIndicator = $('holdIndicator'),
+  metronomeBtn = $('metronomeBtn'), timeListContainer = $('timeListContainer'), timeListInner = $('timeListInner');
+
+// ---------- STATE ----------
+let startTime = 0, elapsedTime = 0, timerInterval = null, isRunning = false;
+let currentScrambleType = '333';
+let sessions = { main: { solves: [], count: 0 } }, activeSession = 'main';
+let pressStartTime = null, holdCheckInterval = null, readyToStart = false;
+let inspectionActive = false, inspectionSeconds = 15, inspectionInterval = null;
+let audioCtx = null, eightSecPlayed = false, twelveSecPlayed = false;
+let metronomeInterval = null, metronomeBPM = 120;
+let cubingReady = false;
+
+const HOLD_DURATION = 800, STORAGE_KEY = 'nt_v9', THEME_KEY = 'nt_theme_v9';
+
+// ---------- AUDIO ----------
+function initAudio() { if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+function playBeep(freq=800, duration=0.1) {
+  if (!audioCtx) return;
+  const osc = audioCtx.createOscillator(), gain = audioCtx.createGain();
+  osc.type='sine'; osc.frequency.value=freq;
+  gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime+duration);
+  osc.connect(gain); gain.connect(audioCtx.destination);
+  osc.start(); osc.stop(audioCtx.currentTime+duration);
+}
+
+// ---------- STORAGE ----------
+function save() { try { localStorage.setItem(STORAGE_KEY, JSON.stringify({sessions,activeSession,currentScrambleType})); } catch(e){} }
+function load() {
+  try {
+    const d = JSON.parse(localStorage.getItem(STORAGE_KEY));
+    if (d) {
+      if (d.sessions) { sessions = d.sessions; for (let k in sessions) sessions[k].count = (sessions[k].solves||[]).length; }
+      if (d.activeSession && sessions[d.activeSession]) activeSession = d.activeSession; else if (!sessions['main']) sessions['main'] = {solves:[],count:0};
+      if (d.currentScrambleType) currentScrambleType = d.currentScrambleType;
+    }
+  } catch(e) {}
+}
+function saveTheme(g,a,b) { try { localStorage.setItem(THEME_KEY, JSON.stringify({g,a,b})); } catch(e){} }
+function loadTheme() {
+  try {
+    const t = JSON.parse(localStorage.getItem(THEME_KEY));
+    if (t) { glowColorInput.value=t.g; accentColorInput.value=t.a; bgColorInput.value=t.b; applyTheme(t.g,t.a,t.b); return; }
+  } catch(e){}
+  applyTheme('#00b7ff','#0077ff','#0a0f1e');
+}
+
+// ---------- FORMATTING ----------
+function fmt(sec) {
+  if (sec===null||isNaN(sec)) return '—';
+  const cs = Math.round(Math.abs(sec)*100), m=Math.floor(cs/6000), r=cs%6000, s=Math.floor(r/100), c=r%100;
+  return (sec<0?'-':'')+(m>0?`${m}:${s.toString().padStart(2,'0')}.${c.toString().padStart(2,'0')}`:`${s.toString().padStart(2,'0')}.${c.toString().padStart(2,'0')}`);
+}
+function updateDisplay() {
+  const cs = Math.round(elapsedTime*100), m=Math.floor(cs/6000), r=cs%6000, s=Math.floor(r/100), c=r%100;
+  timerDisplay.textContent = m>0?`${m}:${s.toString().padStart(2,'0')}.${c.toString().padStart(2,'0')}`:`${s.toString().padStart(2,'0')}.${c.toString().padStart(2,'0')}`;
+}
+
+// ---------- SCRAMBLE GENERATION ----------
+const randomMovesMap = {
+  '333': { moves: ["R","R'","R2","U","U'","U2","F","F'","F2","L","L'","L2","D","D'","D2","B","B'","B2"], len: 20 },
+  '222': { moves: ["R","R'","R2","U","U'","U2","F","F'","F2"], len: 15 },
+  '444wca': { moves: ["R","R'","R2","U","U'","U2","F","F'","F2","L","L'","L2","D","D'","D2","B","B'","B2","Rw","Rw'","Rw2","Uw","Uw'","Uw2"], len: 40 },
+  '555wca': { moves: ["R","R'","R2","U","U'","U2","F","F'","F2","L","L'","L2","D","D'","D2","B","B'","B2","Rw","Rw'","Rw2","Uw","Uw'","Uw2","Lw","Lw'","Lw2"], len: 60 },
+  '666wca': { moves: ["R","R'","R2","U","U'","U2","F","F'","F2","3Rw","3Rw'","3Rw2","3Uw","3Uw'","3Uw2"], len: 80 },
+  '777wca': { moves: ["R","R'","R2","U","U'","U2","F","F'","F2","3Rw","3Rw'","3Rw2","3Uw","3Uw'","3Uw2"], len: 100 },
+  'clkwca': { moves: ["UR","UR'","DR","DR'","DL","DL'","UL","UL'","U","U'","R","R'","D","D'","L","L'","ALL"], len: 14 },
+  'mgmp': { moves: ["R++","R--","D++","D--","U","U'"], len: 70 },
+  'pyrso': { moves: ["R","R'","U","U'","L","L'","B","B'"], len: 10 },
+  'skbso': { moves: ["R","R'","U","U'","L","L'","B","B'"], len: 10 },
+  'sqrs': { moves: ["(0,-1)","(1,0)","(0,3)","(-3,0)","(2,0)","(0,-2)","(3,0)","(0,3)","/"], len: 15 }
+};
+function randomMoves(type) {
+  const entry = randomMovesMap[type] || randomMovesMap['333'];
+  const moves = entry.moves, length = entry.len || 20;
+  let scr=[], last=null, map={R:'R',L:'R',U:'U',D:'U',F:'F',B:'F'};
+  for (let i=0;i<length;i++) {
+    let filtered = moves.filter(m=>{const ax=map[m[0]]||m[0]; return ax!==last;});
+    let move = filtered[Math.floor(Math.random()*filtered.length)];
+    scr.push(move); last = map[move[0]]||move[0];
+  }
+  return scr.join(' ');
+}
+
+const cubingPuzzleMap = {
+  '222': '222', '333': '333', '333ni': '333', '333oh': '333',
+  '444wca': '444', '555wca': '555', '666wca': '666', '777wca': '777',
+  'clkwca': 'clock', 'mgmp': 'megaminx', 'pyrso': 'pyraminx', 'skbso': 'skewb', 'sqrs': 'square1'
+};
+
+async function getCubingScramble(type) {
+  if (!cubingReady || !window.cubing) return null;
+  const puzzle = cubingPuzzleMap[type];
+  if (!puzzle) return null;
+  try {
+    const scramble = await window.cubing.scramble(puzzle);
+    return scramble.toString();
+  } catch(e) { return null; }
+}
+
+async function genScramble(type) {
+  if (subsetAlgs[type]) return subsetAlgs[type][Math.floor(Math.random()*subsetAlgs[type].length)];
+  const scr = await getCubingScramble(type);
+  return scr || randomMoves(type);
+}
+
+async function updateScramble() {
+  scrambleDisplay.textContent = 'Loading...';
+  scrambleDisplay.textContent = await genScramble(currentScrambleType);
+}
+
+// ---------- INSPECTION ----------
+function updateInspectionWarning() {
+  inspectionDisplay.classList.remove('warning-8','warning-12');
+  if (inspectionSeconds===12) { if(!twelveSecPlayed){initAudio();playBeep(600,0.15);twelveSecPlayed=true;} inspectionDisplay.classList.add('warning-8'); }
+  else if (inspectionSeconds===8) { if(!eightSecPlayed){initAudio();playBeep(900,0.2);eightSecPlayed=true;} inspectionDisplay.classList.add('warning-12'); }
+  else if (inspectionSeconds<=5) inspectionDisplay.classList.add('warning-12');
+}
+function startInspection() {
+  if (isRunning||inspectionActive) return;
+  initAudio(); inspectionActive=true; inspectionSeconds=15; eightSecPlayed=twelveSecPlayed=false;
+  inspectionDisplay.classList.remove('hidden','warning-8','warning-12'); inspectionDisplay.textContent=inspectionSeconds;
+  timerDisplay.classList.add('hidden'); timerFace.classList.add('inspecting');
+  statusDisplay.textContent='INSPECTION'; statusDisplay.style.color='var(--inspection)';
+  holdIndicator.style.display='none';
+  inspectionInterval = setInterval(()=>{
+    inspectionSeconds--; inspectionDisplay.textContent=inspectionSeconds;
+    updateInspectionWarning();
+    if (inspectionSeconds<=0) {
+      clearInterval(inspectionInterval); inspectionInterval=null; inspectionActive=false;
+      inspectionDisplay.classList.add('hidden'); timerDisplay.classList.remove('hidden');
+      timerFace.classList.remove('inspecting');
+      statusDisplay.textContent='+2 PENALTY'; statusDisplay.style.color='#ff4444';
+      elapsedTime=2; updateDisplay(); stopAndRecord(true);
+    }
+  },1000);
+}
+
+// ---------- TIMER CONTROL ----------
+function stopAndRecord(penalty=false) {
+  if (isRunning) { clearInterval(timerInterval); timerInterval=null; isRunning=false; elapsedTime=(performance.now()-startTime)/1000; }
+  if (inspectionActive) { clearInterval(inspectionInterval); inspectionInterval=null; inspectionActive=false; inspectionDisplay.classList.add('hidden'); timerDisplay.classList.remove('hidden'); timerFace.classList.remove('inspecting'); }
+  updateDisplay();
+  const t = elapsedTime;
+  sessions[activeSession].solves.push({time:t, scramble:scrambleDisplay.textContent, penalty});
+  sessions[activeSession].count++;
+  lastTimeDisplay.textContent = fmt(t);
+  updateStats(); statusDisplay.textContent=''; timerFace.classList.remove('running','inspecting');
+  holdIndicator.style.display='none'; save(); updateScramble();
+}
+function startTimer() {
+  if (isRunning) return;
+  if (inspectionActive) { clearInterval(inspectionInterval); inspectionInterval=null; inspectionActive=false; inspectionDisplay.classList.add('hidden'); timerDisplay.classList.remove('hidden'); timerFace.classList.remove('inspecting'); }
+  clearInterval(timerInterval); elapsedTime=0; updateDisplay(); isRunning=true;
+  startTime = performance.now();
+  timerInterval = setInterval(()=>{ elapsedTime=(performance.now()-startTime)/1000; updateDisplay(); },10);
+  statusDisplay.textContent='RUNNING'; statusDisplay.style.color='var(--running)';
+  timerFace.classList.add('running'); holdIndicator.style.display='none'; readyToStart=false;
+}
+function resetTimer() {
+  clearInterval(timerInterval); timerInterval=null; isRunning=false;
+  clearInterval(inspectionInterval); inspectionInterval=null; inspectionActive=false;
+  clearInterval(holdCheckInterval); holdCheckInterval=null;
+  elapsedTime=0; updateDisplay(); statusDisplay.textContent='';
+  inspectionDisplay.classList.add('hidden'); timerDisplay.classList.remove('hidden');
+  timerFace.classList.remove('holding','ready','running','inspecting');
+  holdIndicator.style.display='none'; readyToStart=false; pressStartTime=null;
+  updateScramble();
+}
+
+// ---------- STATISTICS ----------
+function calcStats() {
+  const times = sessions[activeSession].solves.map(s=>s.time).filter(t=>t>0);
+  const n = times.length;
+  if (n===0) { meanDisplay.textContent=bestDisplay.textContent=stdDisplay.textContent='—'; return; }
+  const sum = times.reduce((a,b)=>a+b,0), mean = sum/n;
+  meanDisplay.textContent = fmt(mean);
+  bestDisplay.textContent = fmt(Math.min(...times));
+  if (n>1) {
+    const variance = times.reduce((s,t)=>s+(t-mean)**2,0)/n;
+    stdDisplay.textContent = fmt(Math.sqrt(variance));
+  } else stdDisplay.textContent = '0.00';
+}
+function calcAO(n) {
+  const times = sessions[activeSession].solves.slice(-n).map(s=>s.time);
+  if (times.length < n) return null;
+  const sorted = [...times].sort((a,b)=>a-b);
+  const trimmed = n===5 ? sorted.slice(1,4) : sorted.slice(1,11);
+  return trimmed.reduce((a,b)=>a+b,0)/trimmed.length;
+}
+function updateStats() {
+  const s = sessions[activeSession];
+  solveCountDisplay.textContent = s.count;
+  ao5Display.textContent = calcAO(5) !== null ? fmt(calcAO(5)) : '—';
+  ao12Display.textContent = calcAO(12) !== null ? fmt(calcAO(12)) : '—';
+  calcStats();
+  updateTimeList();
+}
+
+// ---------- SESSION MANAGEMENT ----------
+function updateSessionUI() {
+  sessionDisplay.textContent = activeSession;
+  sessionSelect.innerHTML = '';
+  Object.keys(sessions).forEach(s=>{ const o=document.createElement('option'); o.value=s; o.textContent=s; sessionSelect.appendChild(o); });
+  sessionSelect.value = activeSession;
+  updateStats();
+}
+function switchSession(name) {
+  if (!sessions[name]) sessions[name] = {solves:[],count:0};
+  activeSession = name; updateSessionUI(); updateScramble(); elapsedTime=0; updateDisplay(); statusDisplay.textContent=''; save();
+}
+
+// ---------- TIME LIST ----------
+function updateTimeList() {
+  const solves = sessions[activeSession].solves;
+  timeListInner.innerHTML = solves.map((s,i)=>{
+    const penaltyIcon = s.penalty ? '🔴' : (s.time>0?'✅':'');
+    return `<div class="time-item">
+      <span class="idx">${i+1}</span>
+      <span class="time-val">${fmt(s.time)}</span>
+      <span class="penalty" data-idx="${i}" title="Toggle penalty">${penaltyIcon}</span>
+    </div>`;
+  }).join('');
+}
+timeListInner.addEventListener('click', (e)=>{
+  const penaltyEl = e.target.closest('.penalty');
+  if (!penaltyEl) return;
+  const idx = parseInt(penaltyEl.dataset.idx);
+  const solve = sessions[activeSession].solves[idx];
+  solve.penalty = !solve.penalty;
+  if (solve.penalty) solve.time = Math.max(0, solve.time) + 2; else solve.time = Math.max(0, solve.time - 2);
+  updateStats(); save();
+});
+
+// ---------- METRONOME ----------
+function toggleMetronome() {
+  if (metronomeInterval) { clearInterval(metronomeInterval); metronomeInterval=null; metronomeBtn.textContent='⏱️ Metronome'; return; }
+  const bpm = prompt('Enter BPM:', metronomeBPM);
+  if (!bpm) return;
+  metronomeBPM = parseInt(bpm);
+  initAudio();
+  const interval = 60000 / metronomeBPM;
+  playBeep(1000,0.05);
+  metronomeInterval = setInterval(()=>playBeep(1000,0.05), interval);
+  metronomeBtn.textContent = '⏹ Stop Metro';
+}
+metronomeBtn.addEventListener('click', toggleMetronome);
+
+// ---------- TOUCH / KEYBOARD ----------
+function startPress(e) {
+  if (e.type==='touchstart' && e.touches.length>1) return;
+  e.preventDefault();
+  initAudio();
+  if (isRunning) { stopAndRecord(); timerFace.classList.remove('running'); return; }
+  if (!inspectionActive && !isRunning) { startInspection(); return; }
+  if (inspectionActive && !pressStartTime && !readyToStart) {
+    pressStartTime = performance.now(); timerFace.classList.add('holding');
+    holdIndicator.style.display='block'; holdIndicator.textContent='HOLD...';
+    statusDisplay.textContent='HOLDING'; statusDisplay.style.color='var(--hold)';
+    holdCheckInterval = setInterval(()=>{
+      if (performance.now()-pressStartTime >= HOLD_DURATION) {
+        clearInterval(holdCheckInterval); holdCheckInterval=null; readyToStart=true;
+        timerFace.classList.remove('holding'); timerFace.classList.add('ready');
+        holdIndicator.textContent='RELEASE'; statusDisplay.textContent='READY'; statusDisplay.style.color='var(--ready)';
+      }
+    },16);
+  }
+}
+function endPress(e) {
+  e.preventDefault();
+  clearInterval(holdCheckInterval); holdCheckInterval=null;
+  if (readyToStart && !isRunning) startTimer();
+  else if (pressStartTime && !readyToStart) {
+    statusDisplay.textContent='HOLD LONGER'; statusDisplay.style.color='#ff5555';
+    timerFace.classList.remove('holding');
+    setTimeout(()=>{ if(!isRunning&&!readyToStart) statusDisplay.textContent=''; },800);
+  }
+  pressStartTime=null; readyToStart=false;
+  if (!isRunning) { holdIndicator.style.display='none'; timerFace.classList.remove('holding','ready'); }
+}
+function cancelPress() {
+  clearInterval(holdCheckInterval); holdCheckInterval=null; pressStartTime=null; readyToStart=false;
+  if (!isRunning) { holdIndicator.style.display='none'; timerFace.classList.remove('holding','ready'); }
+}
+
+// ---------- THEME ----------
+function applyTheme(g,a,b) {
+  document.documentElement.style.setProperty('--glow',g); document.documentElement.style.setProperty('--accent',a); document.documentElement.style.setProperty('--bg',b);
+  body.style.background=b; bgGlow.style.background=`radial-gradient(ellipse at 50% 40%, ${g}10, transparent 70%)`;
+  timerFace.style.borderColor=`${g}44`; timerFace.style.boxShadow=`0 20px 60px rgba(0,0,0,0.5)`;
+}
+
+// ---------- EVENT LISTENERS ----------
+function populateEvents() {
+  eventSelect.innerHTML = scrambleCategories.map(cat=>{
+    const options = cat[1].map(([name,type])=>`<option value="${type}">${name}</option>`).join('');
+    return `<optgroup label="${cat[0]}">${options}</optgroup>`;
+  }).join('');
+  eventSelect.value = currentScrambleType;
+}
+eventSelect.addEventListener('change', ()=>{ currentScrambleType=eventSelect.value; updateScramble(); save(); });
+resetBtn.addEventListener('click', resetTimer);
+deleteLastBtn.addEventListener('click', ()=>{
+  const s = sessions[activeSession];
+  if (s.solves.length>0) { s.solves.pop(); s.count--; updateStats(); save(); updateScramble(); }
+});
+toggleTimeListBtn.addEventListener('click', ()=> timeListContainer.classList.toggle('hidden'));
+settingsToggleBtn.addEventListener('click', ()=> settingsPanel.classList.toggle('hidden'));
+applyThemeBtn.addEventListener('click', ()=>{
+  const g=glowColorInput.value, a=accentColorInput.value, b=bgColorInput.value;
+  applyTheme(g,a,b); saveTheme(g,a,b);
+});
+newSessionBtn.addEventListener('click', ()=>{
+  const name = prompt('Session name:', 'session'+Date.now().toString().slice(-4));
+  if (name) switchSession(name);
+});
+resetSessionBtn.addEventListener('click', ()=>{
+  if (confirm('Reset current session?')) { sessions[activeSession]={solves:[],count:0}; updateSessionUI(); updateScramble(); save(); }
+});
+sessionSelect.addEventListener('change', (e)=> switchSession(e.target.value));
+
+timerFace.addEventListener('touchstart', startPress, {passive:false});
+timerFace.addEventListener('touchend', endPress);
+timerFace.addEventListener('touchcancel', cancelPress);
+timerFace.addEventListener('mousedown', startPress);
+timerFace.addEventListener('mouseup', endPress);
+timerFace.addEventListener('mouseleave', cancelPress);
+document.addEventListener('keydown', (e)=>{
+  if (e.code==='Space') { e.preventDefault(); if (!pressStartTime) startPress(e); }
+  if (e.code==='KeyR' && !e.ctrlKey) { e.preventDefault(); resetTimer(); }
+});
+document.addEventListener('keyup', (e)=>{ if (e.code==='Space') { e.preventDefault(); endPress(e); } });
+
+// ---------- INIT CUBING ----------
+function initCubing() {
+  if (window.cubing && window.cubing.scramble) {
+    cubingReady = true;
+    updateScramble();
+  } else {
+    setTimeout(initCubing, 200);
+  }
+}
+window.addEventListener('load', initCubing);
+
+// ---------- STARTUP ----------
+load();
+populateEvents();
+updateSessionUI();
+loadTheme();
+updateDisplay();
+updateScramble();
+</script>
+</body>
+</html>
